@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>North American Cordillera: Absolute Form</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #020308; 
+            font-family: 'Times New Roman', serif;
+            touch-action: none;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #ffffff;
+            background: rgba(10, 10, 25, 0.9);
+            padding: 20px;
+            border-radius: 2px;
+            border: 1px solid #00ffcc;
+            box-shadow: 0 0 25px rgba(0, 255, 204, 0.3);
+            z-index: 100;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            max-width: 250px;
+        }
+        #ui.minimized {
+            transform: translateX(-120%) scale(0.8);
+            opacity: 0;
+            pointer-events: none;
+        }
+        #toggle-ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 101;
+            background: #00ffcc;
+            color: #020308;
+            border: none;
+            padding: 8px 12px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            cursor: pointer;
+            border-radius: 2px;
+            display: none; /* Shown when UI is hidden */
+        }
+        #ui-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #00ffcc;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+        }
+        h1 { margin: 0; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 2px; color: #00ffcc; }
+        .close-btn {
+            color: #00ffcc;
+            cursor: pointer;
+            font-size: 1.2rem;
+            line-height: 1;
+            pointer-events: auto;
+        }
+        p { margin: 10px 0 0 0; font-size: 0.85rem; opacity: 0.9; font-style: italic; line-height: 1.4; }
+        .constant { color: #00ffcc; font-family: monospace; font-style: normal; font-weight: bold; }
+        .controls-hint { margin-top: 10px; font-size: 0.7rem; color: #00ffcc; font-style: normal; opacity: 0.6; }
+    </style>
+</head>
+<body>
+    <button id="toggle-ui" onclick="toggleUI()">Show Info</button>
+    <div id="ui">
+        <div id="ui-header">
+            <h1>Cordillera</h1>
+            <div class="close-btn" onclick="toggleUI()">×</div>
+        </div>
+        <p>A Unified Geological Form</p>
+        <p>Master Constant: <span class="constant">k = 4π²</span></p>
+        <p>Uniformity is the image of Eternity.</p>
+        <div class="controls-hint">Drag: Orbit • Pinch/Scroll: Zoom</div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, terrain;
+        let isInteracting = false;
+        let prevX = 0, prevY = 0;
+        let rotY = 0.3, rotX = -0.5;
+        let zoomDist = 1200;
+        let initialPinchDist = null;
+
+        function toggleUI() {
+            const ui = document.getElementById('ui');
+            const btn = document.getElementById('toggle-ui');
+            if (ui.classList.contains('minimized')) {
+                ui.classList.remove('minimized');
+                btn.style.display = 'none';
+            } else {
+                ui.classList.add('minimized');
+                btn.style.display = 'block';
+            }
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x010206);
+            
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 15000);
+            updateCameraPosition();
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            const worldSize = 512; 
+            const geometry = new THREE.PlaneBufferGeometry(4000, 2500, worldSize - 1, worldSize - 1);
+            geometry.rotateX(-Math.PI / 2);
+
+            const vertices = geometry.attributes.position.array;
+            const colors = new Float32Array(vertices.length);
+            
+            const data = generateCordillera(worldSize, worldSize);
+            
+            for (let i = 0, j = 0; i < vertices.length; i += 3, j++) {
+                vertices[i + 1] = data[j];
+                const h = vertices[i + 1];
+                const color = new THREE.Color();
+                
+                if (h > 240) { 
+                    color.setRGB(0.95, 0.95, 1.0);
+                } else if (h > 120) { 
+                    const s = 0.2 + (h / 800);
+                    color.setRGB(s, s * 0.98, s * 1.05);
+                } else if (h > 40) { 
+                    color.setRGB(0.1, 0.15, 0.1);
+                } else { 
+                    color.setRGB(0.05, 0.06, 0.08);
+                }
+                
+                colors[i] = color.r;
+                colors[i+1] = color.g;
+                colors[i+2] = color.b;
+            }
+
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.computeVertexNormals();
+
+            const material = new THREE.MeshStandardMaterial({
+                vertexColors: true,
+                roughness: 0.8,
+                metalness: 0.1
+            });
+
+            terrain = new THREE.Mesh(geometry, material);
+            terrain.receiveShadow = true;
+            terrain.castShadow = true;
+            scene.add(terrain);
+
+            const sun = new THREE.DirectionalLight(0xfffdfa, 1.5);
+            sun.position.set(1000, 1500, 500);
+            sun.castShadow = true;
+            sun.shadow.mapSize.width = 2048;
+            sun.shadow.mapSize.height = 2048;
+            scene.add(sun);
+
+            const ambient = new THREE.AmbientLight(0x223344, 0.5);
+            scene.add(ambient);
+
+            window.addEventListener('wheel', (e) => {
+                zoomDist += e.deltaY * 0.8;
+                zoomDist = Math.max(200, Math.min(4000, zoomDist));
+                updateCameraPosition();
+            }, { passive: true });
+
+            window.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 1) {
+                    isInteracting = true;
+                    prevX = e.touches[0].clientX;
+                    prevY = e.touches[0].clientY;
+                } else if (e.touches.length === 2) {
+                    initialPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                }
+            }, { passive: false });
+
+            window.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 1 && isInteracting) {
+                    rotY += (e.touches[0].clientX - prevX) * 0.007;
+                    rotX += (e.touches[0].clientY - prevY) * 0.007;
+                    rotX = Math.max(-1.4, Math.min(-0.1, rotX));
+                    prevX = e.touches[0].clientX;
+                    prevY = e.touches[0].clientY;
+                } else if (e.touches.length === 2 && initialPinchDist !== null) {
+                    const currentDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                    zoomDist += (initialPinchDist - currentDist) * 3;
+                    zoomDist = Math.max(200, Math.min(4000, zoomDist));
+                    initialPinchDist = currentDist;
+                }
+                updateCameraPosition();
+                e.preventDefault();
+            }, { passive: false });
+
+            window.addEventListener('touchend', () => { isInteracting = false; initialPinchDist = null; });
+            window.addEventListener('mousedown', (e) => { isInteracting = true; prevX = e.clientX; prevY = e.clientY; });
+            window.addEventListener('mousemove', (e) => {
+                if(isInteracting) {
+                    rotY += (e.clientX - prevX) * 0.005;
+                    rotX += (e.clientY - prevY) * 0.005;
+                    rotX = Math.max(-1.4, Math.min(-0.1, rotX));
+                    prevX = e.clientX; prevY = e.clientY;
+                    updateCameraPosition();
+                }
+            });
+            window.addEventListener('mouseup', () => isInteracting = false);
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function updateCameraPosition() {
+            camera.position.z = Math.cos(rotY) * zoomDist;
+            camera.position.x = Math.sin(rotY) * zoomDist;
+            camera.position.y = -Math.sin(rotX) * zoomDist;
+            camera.lookAt(0, 0, 0);
+        }
+
+        function hash(n) { return (Math.sin(n) * 43758.5453123) % 1; }
+        
+        function noise(x, y) {
+            const ix = Math.floor(x); const iy = Math.floor(y);
+            const fx = x - ix; const fy = y - iy;
+            const a = hash(ix + iy * 57); const b = hash(ix + 1 + iy * 57);
+            const c = hash(ix + (iy + 1) * 57); const d = hash(ix + 1 + (iy + 1) * 57);
+            const ux = fx * fx * (3 - 2 * fx); const uy = fy * fy * (3 - 2 * fy);
+            return (a * (1 - ux) + b * ux) * (1 - uy) + (c * (1 - ux) + d * ux) * uy;
+        }
+
+        function generateCordillera(width, height) {
+            const size = width * height;
+            const data = new Float32Array(size);
+            for (let i = 0; i < size; i++) {
+                const x = i % width; const y = ~~(i / width);
+                let h = 0; let amp = 1.0; let freq = 0.006;
+                for(let oct = 0; oct < 10; oct++) {
+                    h += Math.abs(noise(x * freq, y * freq)) * amp;
+                    amp *= 0.52; freq *= 2.1;
+                }
+                const westBias = 1.0 - (x / width);
+                h = Math.pow(h, 2.5) * 550 * westBias;
+                const shelfMask = Math.pow(Math.max(0, 1 - Math.abs((y - height/2) / (height/2))), 1.1);
+                data[i] = h * shelfMask;
+            }
+            return data;
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
+        window.onload = () => { init(); animate(); };
+    </script>
+</body>
+</html>
+
