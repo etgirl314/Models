@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>The Image of His Own Eternity</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: radial-gradient(circle at center, #0d1117 0%, #000 100%); }
+        #ui {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            color: #d4af37;
+            font-family: 'Times New Roman', serif;
+            pointer-events: none;
+            letter-spacing: 2px;
+            text-shadow: 0 0 15px rgba(212, 175, 55, 0.4);
+            z-index: 10;
+        }
+        canvas { display: block; touch-action: none; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <h2 style="margin:0; font-variant: small-caps;">The Blueprint of Eternity</h2>
+        <p style="opacity:0.6; font-size: 0.8rem;">$k = 4\pi^2$ • Unified Protons & Photons</p>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let scene, camera, renderer, clock;
+        let treeGroup, glowGroup;
+        let targetRotationY = 0, targetRotationX = 0;
+        let isDragging = false, lastX, lastY;
+        
+        const K_CONSTANT = 4 * Math.PI * Math.PI;
+
+        window.onload = function() {
+            init();
+            animate();
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 30, 90);
+
+            renderer = new THREE.WebGLRenderer({ 
+                antialias: true, 
+                powerPreference: "high-performance",
+                logarithmicDepthBuffer: true
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            document.body.appendChild(renderer.domElement);
+
+            clock = new THREE.Clock();
+            treeGroup = new THREE.Group();
+            glowGroup = new THREE.Group();
+            scene.add(treeGroup, glowGroup);
+
+            // Sunlight mimicking the outdoor glare in the photo
+            const sun = new THREE.DirectionalLight(0xfffef5, 3.5);
+            sun.position.set(50, 70, 40);
+            sun.castShadow = true;
+            sun.shadow.mapSize.set(2048, 2048);
+            sun.shadow.camera.left = -50;
+            sun.shadow.camera.right = 50;
+            sun.shadow.camera.top = 70;
+            sun.shadow.camera.bottom = -20;
+            scene.add(sun);
+            
+            // Subtle sky light for softer shadows
+            const skyLight = new THREE.HemisphereLight(0xddeeff, 0x0f150f, 1.0);
+            scene.add(skyLight);
+
+            // Grassy Foundation
+            const groundGeo = new THREE.CircleGeometry(160, 64);
+            const groundMat = new THREE.MeshStandardMaterial({ 
+                color: 0x1a240f, 
+                roughness: 1.0, 
+                metalness: 0 
+            });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Replicating the specific lean and bulk from the image
+            // Starting with a gnarled, slightly curved trunk
+            buildLifeTree(new THREE.Vector3(0, 0, 0), new THREE.Vector3(-0.08, 1, 0.05), 14, 2.8, 10);
+
+            createEnergyHalo();
+
+            window.addEventListener('resize', onWindowResize);
+            renderer.domElement.addEventListener('touchstart', (e) => { 
+                isDragging = true; 
+                lastX = e.touches[0].clientX; 
+                lastY = e.touches[0].clientY; 
+            }, {passive: false});
+            renderer.domElement.addEventListener('touchend', () => isDragging = false);
+            renderer.domElement.addEventListener('touchmove', (e) => {
+                if (isDragging) {
+                    targetRotationY += (e.touches[0].clientX - lastX) * 0.004;
+                    targetRotationX += (e.touches[0].clientY - lastY) * 0.004;
+                    lastX = e.touches[0].clientX;
+                    lastY = e.touches[0].clientY;
+                    e.preventDefault();
+                }
+            }, {passive: false});
+        }
+
+        function buildLifeTree(start, direction, length, radius, depth) {
+            const end = start.clone().add(direction.clone().multiplyScalar(length));
+            const segments = depth > 6 ? 32 : 12;
+            const branchGeo = new THREE.CylinderGeometry(radius * 0.75, radius, length, segments, 10);
+            
+            // Detailed Bark: High-frequency displacement for "Matter" realism
+            const pos = branchGeo.attributes.position;
+            const v = new THREE.Vector3();
+            for(let i = 0; i < pos.count; i++) {
+                v.fromBufferAttribute(pos, i);
+                // Gnarled organic noise (fissures and bumps)
+                const noise = (Math.sin(v.y * 5.0) * Math.cos(v.x * 2.5) + Math.sin(v.y * 15.0) * 0.2) * (radius * 0.2);
+                pos.setX(i, pos.getX(i) + noise);
+                pos.setZ(i, pos.getZ(i) + noise);
+            }
+            
+            const branchMat = new THREE.MeshStandardMaterial({ 
+                color: 0x221a12, 
+                roughness: 1.0, 
+                metalness: 0.01 
+            });
+            const branch = new THREE.Mesh(branchGeo, branchMat);
+            const mid = new THREE.Vector3().lerpVectors(start, end, 0.5);
+            branch.position.copy(mid);
+            branch.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.clone().normalize());
+            branch.castShadow = true;
+            branch.receiveShadow = true;
+            treeGroup.add(branch);
+
+            // Foliage logic based on image: Denser clumps and varied greens
+            if (depth <= 1) {
+                const leafColors = [0x0e2b00, 0x1a3a00, 0x2d4d00];
+                const leafMat = new THREE.MeshStandardMaterial({ 
+                    color: leafColors[Math.floor(Math.random()*3)],
+                    emissive: 0x010300,
+                    roughness: 0.7,
+                    side: THREE.DoubleSide
+                });
+                
+                // Clump density logic for the gnarled appearance
+                const count = depth === 0 ? 12 : 5;
+                for(let i=0; i < count; i++) {
+                    const leafGeo = new THREE.IcosahedronGeometry(radius * 4.5, 0);
+                    const leaf = new THREE.Mesh(leafGeo, leafMat);
+                    const offset = new THREE.Vector3(
+                        (Math.random()-0.5) * radius * 6,
+                        (Math.random()-0.3) * radius * 4,
+                        (Math.random()-0.5) * radius * 6
+                    );
+                    leaf.position.copy(end).add(offset);
+                    leaf.scale.set(1.4 + Math.random(), 0.2 + Math.random()*0.2, 1.2 + Math.random());
+                    leaf.rotation.set(Math.random(), Math.random(), Math.random());
+                    leaf.userData.isLeaf = true;
+                    leaf.userData.origY = leaf.position.y;
+                    leaf.castShadow = true;
+                    treeGroup.add(leaf);
+                }
+                if(depth === 0) return;
+            }
+
+            // Recursive growth seeking light while maintaining asymmetric weight
+            const splits = (depth > 8) ? 1 : (Math.random() > 0.45 ? 2 : 3);
+            for (let i = 0; i < splits; i++) {
+                const newDir = direction.clone();
+                newDir.y += 0.25; // Phototropism
+                
+                // Introduce specific organic "gnarl" toward the left side
+                const axis = new THREE.Vector3(Math.random()-0.6, Math.random()-0.5, Math.random()-0.5).normalize();
+                const spread = 0.35 + (Math.random() * 0.4);
+                newDir.applyAxisAngle(axis, spread);
+                newDir.normalize();
+                
+                buildLifeTree(end, newDir, length * 0.82, radius * 0.75, depth - 1);
+            }
+        }
+
+        function createEnergyHalo() {
+            const count = 500; 
+            const pGeo = new THREE.SphereGeometry(0.08, 6, 6);
+            const pMat = new THREE.MeshBasicMaterial({ color: 0xffe57f, transparent: true, opacity: 0.5 });
+            
+            for(let i=0; i < count; i++) {
+                const photon = new THREE.Mesh(pGeo, pMat);
+                const r = 18 + Math.random() * 35;
+                const theta = Math.random() * Math.PI * 2;
+                const h = Math.random() * 60;
+                photon.position.set(Math.cos(theta)*r, h, Math.sin(theta)*r);
+                photon.userData.phase = Math.random() * Math.PI * 2;
+                glowGroup.add(photon);
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = clock.getElapsedTime();
+
+            glowGroup.children.forEach((p, i) => {
+                p.material.opacity = 0.15 + Math.abs(Math.sin(time * 0.3 + p.userData.phase)) * 0.4;
+                p.position.y += Math.sin(time * 0.5 + i) * 0.004;
+            });
+
+            treeGroup.children.forEach((obj, i) => {
+                if (obj.userData.isLeaf) {
+                    obj.position.y = obj.userData.origY + Math.sin(time * 0.4 + i) * 0.12;
+                    obj.rotation.z = Math.sin(time * 0.2 + i) * 0.03;
+                }
+            });
+
+            treeGroup.rotation.y += (targetRotationY - treeGroup.rotation.y) * 0.07;
+            treeGroup.rotation.x += (targetRotationX - treeGroup.rotation.x) * 0.07;
+            glowGroup.rotation.copy(treeGroup.rotation);
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
+
